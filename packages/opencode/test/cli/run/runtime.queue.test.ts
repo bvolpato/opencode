@@ -67,8 +67,13 @@ function footer() {
     api,
     events,
     commits,
-    submit(text: string, mode?: RunPrompt["mode"]) {
-      const next = mode ? { text, parts: [] as RunPrompt["parts"], mode } : { text, parts: [] as RunPrompt["parts"] }
+    submit(input: string | RunPrompt, mode?: RunPrompt["mode"]) {
+      const next =
+        typeof input === "string"
+          ? mode
+            ? { text: input, parts: [] as RunPrompt["parts"], mode }
+            : { text: input, parts: [] as RunPrompt["parts"] }
+          : input
       for (const fn of [...prompts]) {
         fn(next)
       }
@@ -477,5 +482,65 @@ describe("run runtime queue", () => {
 
     ui.submit("one")
     await expect(task).rejects.toThrow("boom")
+  })
+
+  test("steer aborts the current turn and runs immediately", async () => {
+    const ui = footer()
+    const seen: string[] = []
+    let hit = false
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input, signal) => {
+        seen.push(input.text)
+        if (input.text === "one") {
+          await new Promise<void>((resolve) => {
+            if (signal.aborted) {
+              hit = true
+              resolve()
+              return
+            }
+            signal.addEventListener("abort", () => {
+              hit = true
+              resolve()
+            }, { once: true })
+          })
+          return
+        }
+        ui.api.close()
+      },
+    })
+
+    ui.submit("one")
+    await Promise.resolve()
+    ui.submit({ text: "steer me", parts: [], steer: true })
+    await task
+
+    expect(hit).toBe(true)
+    expect(seen).toEqual(["one", "steer me"])
+  })
+
+  test("steer clears pending queued work", async () => {
+    const ui = footer()
+    const seen: string[] = []
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async (input) => {
+        seen.push(input.text)
+        if (input.text === "steer me") {
+          ui.api.close()
+        }
+      },
+    })
+
+    ui.submit("one")
+    ui.submit("two")
+    ui.submit("three")
+    await Promise.resolve()
+    ui.submit({ text: "steer me", parts: [], steer: true })
+    await task
+
+    expect(seen).toEqual(["one", "steer me"])
   })
 })

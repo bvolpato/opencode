@@ -68,6 +68,7 @@ function config(input?: {
     historyNext: string[]
     inputClear: string[]
     inputSubmit: string[]
+    inputSteer: string[]
     inputNewline: string[]
   }>
 }): Resolved {
@@ -84,6 +85,7 @@ function config(input?: {
       ...(bind?.historyNext && { history_next: bind.historyNext }),
       ...(bind?.inputClear && { input_clear: bind.inputClear }),
       ...(bind?.inputSubmit && { input_submit: bind.inputSubmit }),
+      ...(bind?.inputSteer && { input_steer: bind.inputSteer }),
       ...(bind?.inputNewline && { input_newline: bind.inputNewline }),
     },
   })
@@ -106,6 +108,7 @@ describe("run runtime boot", () => {
           historyNext: ["j"],
           inputClear: ["ctrl+l"],
           inputSubmit: ["ctrl+s"],
+          inputSteer: ["ctrl+return"],
           inputNewline: ["alt+return"],
         },
       }),
@@ -122,6 +125,7 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("j")
     expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+l")
     expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("ctrl+s")
+    expect(result.keybinds.get("input.steer")?.[0]?.key).toBe("ctrl+return")
     expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("alt+return")
   })
 
@@ -140,7 +144,8 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("down")
     expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+c")
     expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
-    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,alt+return,ctrl+j")
+    expect(result.keybinds.get("input.steer")?.[0]?.key).toBe("ctrl+return")
+    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,alt+return,ctrl+j")
   })
 
   test("preserves disabled leader from resolved tui config", async () => {

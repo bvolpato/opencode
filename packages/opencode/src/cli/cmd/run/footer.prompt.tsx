@@ -1012,6 +1012,18 @@ export function createPromptState(input: PromptInput): PromptState {
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
     enabled: input.prompt() && !visible(),
+    bindings: input.tuiConfig.keybinds.get("input.steer").map((binding) => ({
+      ...binding,
+      cmd() {
+        submitSteer()
+        return true
+      },
+    })),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: input.prompt() && !visible(),
     commands: [
       {
         name: "prompt.editor",
@@ -1219,6 +1231,11 @@ export function createPromptState(input: PromptInput): PromptState {
   const onSubmit = () => {
     syncDraft()
     submitPrompt(clonePrompt(draft))
+  }
+
+  const submitSteer = () => {
+    syncDraft()
+    submitPrompt({ ...clonePrompt(draft), steer: true })
   }
 
   const submitText = (text: string) => {

@@ -275,6 +275,15 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       return
     }
 
+    if (prompt.steer) {
+      state.queue = [prompt]
+      state.queued = []
+      state.ctrl?.abort()
+      syncQueue()
+      drain()
+      return
+    }
+
     const active = state.active
     if (
       active &&

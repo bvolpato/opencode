@@ -298,6 +298,9 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
   })
 
+  const [queuedPrompts, setQueuedPrompts] = createSignal<PromptInfo[]>([])
+  const isRunning = createMemo(() => status().type !== "idle")
+
   createEffect(
     on(
       () => props.sessionID,
@@ -306,6 +309,19 @@ export function Prompt(props: PromptProps) {
       },
       { defer: true },
     ),
+  )
+
+  // Auto-drain queued prompts when the session becomes idle
+  createEffect(
+    on(isRunning, (running, wasRunning) => {
+      if (wasRunning === true && running === false && queuedPrompts().length > 0) {
+        const next = queuedPrompts()[0]
+        setQueuedPrompts((prev) => prev.slice(1))
+        setStore("prompt", { input: next.input, parts: next.parts })
+        if (next.mode) setStore("mode", next.mode)
+        queueMicrotask(() => void submit())
+      }
+    }),
   )
 
   // Initialize agent/model/variant from last user message when session changes
@@ -816,6 +832,20 @@ export function Prompt(props: PromptProps) {
   useBindings(() => {
     return {
       target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled && !auto()?.visible,
+      bindings: tuiConfig.keybinds.get("input.steer").map((binding) => ({
+        ...binding,
+        cmd: () => {
+          void steer()
+          return true
+        },
+      })),
+    }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
       enabled: (() => {
         cursorVersion()
         return (
@@ -928,7 +958,7 @@ export function Prompt(props: PromptProps) {
   })
 
   let submitting = false
-  async function submit() {
+  async function submit(options: { steer?: boolean } = {}) {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
     // input's native onSubmit racing another dispatch). Without this guard,
     // a second call slips past the empty-input check before the first call
@@ -938,13 +968,17 @@ export function Prompt(props: PromptProps) {
     if (submitting) return false
     submitting = true
     try {
-      return await submitInner()
+      return await submitInner(options)
     } finally {
       submitting = false
     }
   }
 
-  async function submitInner() {
+  async function steer() {
+    return submit({ steer: true })
+  }
+
+  async function submitInner(options: { steer?: boolean } = {}) {
     workspace.clearNotice()
 
     // IME: double-defer may fire before onContentChange flushes the last
@@ -958,6 +992,18 @@ export function Prompt(props: PromptProps) {
     if (workspace.creating() || move.creating()) return false
     if (auto()?.visible) return false
     if (!store.prompt.input) return false
+
+    const steer = options.steer ?? false
+    if (!steer && status().type !== "idle") {
+      const toQueue: PromptInfo = { ...store.prompt, mode: store.mode }
+      setQueuedPrompts((prev) => [...prev, toQueue])
+      input.extmarks.clear()
+      setStore("prompt", { input: "", parts: [] })
+      setStore("extmarkToPartIndex", new Map())
+      input.clear()
+      return true
+    }
+
     const agent = local.agent.current()
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
@@ -1584,6 +1630,11 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
+                <Show when={queuedPrompts().length > 0}>
+                  <text fg={theme.accent}>
+                    {queuedPrompts().length} queued
+                  </text>
+                </Show>
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>

@@ -13,7 +13,6 @@ import { reusePendingTask } from "./runtime.shared"
 import { resolveSession, sessionHistory } from "./session.shared"
 import type { RunDiffStyle, RunInput, RunPrompt, RunProvider, RunTuiConfig } from "./types"
 import { pickVariant } from "./variant.shared"
-
 export type ModelInfo = {
   providers: RunProvider[]
   variants: string[]
