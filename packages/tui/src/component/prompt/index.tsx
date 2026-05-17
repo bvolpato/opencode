@@ -316,13 +316,34 @@ export function Prompt(props: PromptProps) {
     on(isRunning, (running, wasRunning) => {
       if (wasRunning === true && running === false && queuedPrompts().length > 0) {
         const next = queuedPrompts()[0]
+        if (!next) return
         setQueuedPrompts((prev) => prev.slice(1))
+        if (input && !input.isDestroyed) {
+          input.setText(next.input)
+        }
         setStore("prompt", { input: next.input, parts: next.parts })
+        restoreExtmarksFromParts(next.parts)
         if (next.mode) setStore("mode", next.mode)
         queueMicrotask(() => void submit())
       }
     }),
   )
+
+  const deleteQueuedPrompt = (index: number) => {
+    setQueuedPrompts((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const editQueuedPrompt = (index: number) => {
+    const prompt = queuedPrompts()[index]
+    if (!prompt) return
+    setQueuedPrompts((prev) => prev.filter((_, i) => i !== index))
+    if (input && !input.isDestroyed) {
+      input.setText(prompt.input)
+    }
+    setStore("prompt", { input: prompt.input, parts: prompt.parts })
+    restoreExtmarksFromParts(prompt.parts)
+    if (prompt.mode) setStore("mode", prompt.mode)
+  }
 
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
@@ -1631,9 +1652,24 @@ export function Prompt(props: PromptProps) {
                   </box>
                 </box>
                 <Show when={queuedPrompts().length > 0}>
-                  <text fg={theme.accent}>
-                    {queuedPrompts().length} queued
-                  </text>
+                  <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+                    <text fg={theme.accent}>{queuedPrompts().length} queued</text>
+                    {(() => {
+                      const first = queuedPrompts()[0]
+                      if (!first) return null
+                      const label = first.input.slice(0, 30) + (first.input.length > 30 ? "..." : "")
+                      return (
+                        <>
+                          <text fg={theme.textMuted}>"{label}"</text>
+                          <text fg={theme.error} onMouseUp={() => deleteQueuedPrompt(0)}>×</text>
+                          <text fg={theme.accent} onMouseUp={() => editQueuedPrompt(0)}>✎</text>
+                          <Show when={queuedPrompts().length > 1}>
+                            <text fg={theme.textMuted}>+{queuedPrompts().length - 1} more</text>
+                          </Show>
+                        </>
+                      )
+                    })()}
+                  </box>
                 </Show>
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                   esc{" "}
