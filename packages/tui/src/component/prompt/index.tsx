@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import { registerOpencodeSpinner } from "../register-spinner"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -311,32 +311,17 @@ export function Prompt(props: PromptProps) {
     ),
   )
 
-  // Auto-drain queued prompts when the session becomes idle
-  createEffect(
-    on(isRunning, (running, wasRunning) => {
-      if (wasRunning === true && running === false && queuedPrompts().length > 0) {
-        const next = queuedPrompts()[0]
-        if (!next) return
-        setQueuedPrompts((prev) => prev.slice(1))
-        if (input && !input.isDestroyed) {
-          input.setText(next.input)
-        }
-        setStore("prompt", { input: next.input, parts: next.parts })
-        restoreExtmarksFromParts(next.parts)
-        if (next.mode) setStore("mode", next.mode)
-        queueMicrotask(() => void submit())
-      }
-    }),
-  )
-
   const deleteQueuedPrompt = (index: number) => {
     setQueuedPrompts((prev) => prev.filter((_, i) => i !== index))
   }
 
-  const editQueuedPrompt = (index: number) => {
+  const takeQueuedPrompt = (index: number) => {
     const prompt = queuedPrompts()[index]
-    if (!prompt) return
-    setQueuedPrompts((prev) => prev.filter((_, i) => i !== index))
+    if (prompt) setQueuedPrompts((prev) => prev.filter((_, i) => i !== index))
+    return prompt
+  }
+
+  const loadQueuedPrompt = (prompt: PromptInfo) => {
     if (input && !input.isDestroyed) {
       input.setText(prompt.input)
     }
@@ -344,6 +329,37 @@ export function Prompt(props: PromptProps) {
     restoreExtmarksFromParts(prompt.parts)
     if (prompt.mode) setStore("mode", prompt.mode)
   }
+
+  const editQueuedPrompt = (index: number) => {
+    const prompt = takeQueuedPrompt(index)
+    if (!prompt) return
+    loadQueuedPrompt(prompt)
+  }
+
+  const steerQueuedPrompt = (index: number) => {
+    const prompt = takeQueuedPrompt(index)
+    if (!prompt) return
+    loadQueuedPrompt(prompt)
+    queueMicrotask(() => void steer())
+  }
+
+  const sendQueuedPrompt = (index: number) => {
+    const prompt = takeQueuedPrompt(index)
+    if (!prompt) return
+    loadQueuedPrompt(prompt)
+    queueMicrotask(() => void submit())
+  }
+
+  // Auto-drain queued prompts when the session becomes idle
+  createEffect(
+    on(isRunning, (running, wasRunning) => {
+      if (wasRunning !== true || running || queuedPrompts().length === 0) return
+      const next = takeQueuedPrompt(0)
+      if (!next) return
+      loadQueuedPrompt(next)
+      queueMicrotask(() => void submit())
+    }),
+  )
 
   // Initialize agent/model/variant from last user message when session changes
   let syncedSessionID: string | undefined
@@ -1654,21 +1670,28 @@ export function Prompt(props: PromptProps) {
                 <Show when={queuedPrompts().length > 0}>
                   <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
                     <text fg={theme.accent}>{queuedPrompts().length} queued</text>
-                    {(() => {
-                      const first = queuedPrompts()[0]
-                      if (!first) return null
-                      const label = first.input.slice(0, 30) + (first.input.length > 30 ? "..." : "")
-                      return (
-                        <>
-                          <text fg={theme.textMuted}>"{label}"</text>
-                          <text fg={theme.error} onMouseUp={() => deleteQueuedPrompt(0)}>×</text>
-                          <text fg={theme.accent} onMouseUp={() => editQueuedPrompt(0)}>✎</text>
-                          <Show when={queuedPrompts().length > 1}>
-                            <text fg={theme.textMuted}>+{queuedPrompts().length - 1} more</text>
-                          </Show>
-                        </>
-                      )
-                    })()}
+                    <For each={queuedPrompts()}>
+                      {(prompt, index) => {
+                        const label = prompt.input.slice(0, 30) + (prompt.input.length > 30 ? "..." : "")
+                        return (
+                          <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+                            <text fg={theme.textMuted}>"{label}"</text>
+                            <text fg={theme.primary} onMouseUp={() => sendQueuedPrompt(index())}>
+                              ▶
+                            </text>
+                            <text fg={theme.accent} onMouseUp={() => steerQueuedPrompt(index())}>
+                              ↑
+                            </text>
+                            <text fg={theme.error} onMouseUp={() => deleteQueuedPrompt(index())}>
+                              ×
+                            </text>
+                            <text fg={theme.accent} onMouseUp={() => editQueuedPrompt(index())}>
+                              ✎
+                            </text>
+                          </box>
+                        )
+                      }}
+                    </For>
                   </box>
                 </Show>
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
