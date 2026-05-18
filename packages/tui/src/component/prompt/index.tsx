@@ -336,18 +336,37 @@ export function Prompt(props: PromptProps) {
     loadQueuedPrompt(prompt)
   }
 
+  function submitQueuedPrompt(prompt: PromptInfo, submitFn: () => Promise<boolean>) {
+    const savedInput = store.prompt.input
+    const savedParts = [...store.prompt.parts]
+    const savedMode = store.mode
+
+    loadQueuedPrompt(prompt)
+
+    queueMicrotask(() => {
+      void (async () => {
+        await submitFn()
+        // Restore the user's draft so typing isn't lost when sending from queue
+        if (input && !input.isDestroyed) {
+          input.setText(savedInput)
+        }
+        setStore("prompt", { input: savedInput, parts: savedParts })
+        restoreExtmarksFromParts(savedParts)
+        if (savedMode) setStore("mode", savedMode)
+      })()
+    })
+  }
+
   const steerQueuedPrompt = (index: number) => {
     const prompt = takeQueuedPrompt(index)
     if (!prompt) return
-    loadQueuedPrompt(prompt)
-    queueMicrotask(() => void steer())
+    submitQueuedPrompt(prompt, steer)
   }
 
   const sendQueuedPrompt = (index: number) => {
     const prompt = takeQueuedPrompt(index)
     if (!prompt) return
-    loadQueuedPrompt(prompt)
-    queueMicrotask(() => void submit())
+    submitQueuedPrompt(prompt, submit)
   }
 
   // Auto-drain queued prompts when the session becomes idle
