@@ -336,7 +336,9 @@ export function Prompt(props: PromptProps) {
     loadQueuedPrompt(prompt)
   }
 
-  function submitQueuedPrompt(prompt: PromptInfo, submitFn: () => Promise<boolean>) {
+  const steerQueuedPrompt = (index: number) => {
+    const prompt = takeQueuedPrompt(index)
+    if (!prompt) return
     const savedInput = store.prompt.input
     const savedParts = [...store.prompt.parts]
     const savedMode = store.mode
@@ -345,7 +347,7 @@ export function Prompt(props: PromptProps) {
 
     queueMicrotask(() => {
       void (async () => {
-        await submitFn()
+        await steer()
         // Restore the user's draft so typing isn't lost when sending from queue
         if (input && !input.isDestroyed) {
           input.setText(savedInput)
@@ -355,18 +357,6 @@ export function Prompt(props: PromptProps) {
         if (savedMode) setStore("mode", savedMode)
       })()
     })
-  }
-
-  const steerQueuedPrompt = (index: number) => {
-    const prompt = takeQueuedPrompt(index)
-    if (!prompt) return
-    submitQueuedPrompt(prompt, steer)
-  }
-
-  const sendQueuedPrompt = (index: number) => {
-    const prompt = takeQueuedPrompt(index)
-    if (!prompt) return
-    submitQueuedPrompt(prompt, submit)
   }
 
   // Auto-drain queued prompts when the session becomes idle
@@ -1687,30 +1677,29 @@ export function Prompt(props: PromptProps) {
                   </box>
                 </box>
                 <Show when={queuedPrompts().length > 0}>
-                  <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+                  <box flexDirection="row" gap={1} flexShrink={0} alignItems="flex-start">
                     <text fg={theme.accent}>{queuedPrompts().length} queued</text>
-                    <For each={queuedPrompts()}>
-                      {(prompt, index) => {
-                        const label = prompt.input.slice(0, 30) + (prompt.input.length > 30 ? "..." : "")
-                        return (
-                          <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
-                            <text fg={theme.textMuted}>"{label}"</text>
-                            <text fg={theme.primary} onMouseUp={() => sendQueuedPrompt(index())}>
-                              ▶
-                            </text>
-                            <text fg={theme.accent} onMouseUp={() => steerQueuedPrompt(index())}>
-                              ↑
-                            </text>
-                            <text fg={theme.error} onMouseUp={() => deleteQueuedPrompt(index())}>
-                              ×
-                            </text>
-                            <text fg={theme.accent} onMouseUp={() => editQueuedPrompt(index())}>
-                              ✎
-                            </text>
-                          </box>
-                        )
-                      }}
-                    </For>
+                    <box flexDirection="column">
+                      <For each={queuedPrompts()}>
+                        {(prompt, index) => {
+                          const label = prompt.input.slice(0, 30) + (prompt.input.length > 30 ? "..." : "")
+                          return (
+                            <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
+                              <text fg={theme.textMuted}>"{label}"</text>
+                              <text fg={theme.accent} onMouseUp={() => steerQueuedPrompt(index())}>
+                                ↑
+                              </text>
+                              <text fg={theme.error} onMouseUp={() => deleteQueuedPrompt(index())}>
+                                ×
+                              </text>
+                              <text fg={theme.accent} onMouseUp={() => editQueuedPrompt(index())}>
+                                ✎
+                              </text>
+                            </box>
+                          )
+                        }}
+                      </For>
+                    </box>
                   </box>
                 </Show>
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
