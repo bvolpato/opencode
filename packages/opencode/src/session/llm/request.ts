@@ -205,12 +205,19 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
 })
 
-function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
+function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "provider" | "user">) {
   const disabled = Permission.disabled(
     Object.keys(input.tools),
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
-  return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+  const configured = input.provider.options.toolAllowlist
+  const allowed = Array.isArray(configured)
+    ? new Set(configured.filter((tool): tool is string => typeof tool === "string"))
+    : undefined
+  return Record.filter(
+    input.tools,
+    (_, k) => input.user.tools?.[k] !== false && !disabled.has(k) && (!allowed || allowed.has(k)),
+  )
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {

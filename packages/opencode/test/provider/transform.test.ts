@@ -587,6 +587,61 @@ describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
     expect(result.tools.lookup.strict).toBe(false)
   })
 
+  test("provider tool allowlist filters request tools", async () => {
+    const model = {
+      ...createGpt5Model("qwen3.6-35b-a3b"),
+      id: "qwen3.6-35b-a3b",
+      providerID: "local",
+      api: {
+        id: "qwen3.6-35b-a3b",
+        url: "http://127.0.0.1:1337/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    }
+    const result = await Effect.runPromise(
+      LLMRequestPrep.prepare({
+        user: {
+          id: "msg_user-test",
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: "local", modelID: model.id },
+        } as any,
+        sessionID,
+        model,
+        agent: {
+          name: "build",
+          mode: "primary",
+          options: {},
+          permission: [],
+        } as any,
+        system: [],
+        messages: [{ role: "user", content: "Hello" }],
+        tools: {
+          read: {
+            description: "Read a file",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+          github_search_code: {
+            description: "Search GitHub",
+            inputSchema: jsonSchema({ type: "object", properties: {} }),
+          },
+        },
+        provider: { id: "local", options: { toolAllowlist: ["read"] } } as any,
+        auth: undefined,
+        plugin: {
+          trigger: (_name: string, _input: unknown, output: unknown) => Effect.succeed(output),
+          list: () => Effect.succeed([]),
+          init: () => Effect.void,
+        } as any,
+        flags: { outputTokenMax: 32_000, client: "test" } as any,
+        isWorkflow: false,
+      }),
+    )
+    expect(Object.keys(result.tools)).toEqual(["read"])
+  })
+
   test("gpt-5.1 should have textVerbosity set to low", () => {
     const model = createGpt5Model("gpt-5.1")
     const result = ProviderTransform.options({ model, sessionID, providerOptions: {} })

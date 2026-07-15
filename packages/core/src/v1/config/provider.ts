@@ -118,6 +118,9 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        toolAllowlist: Schema.optional(Schema.mutable(Schema.Array(Schema.String))).annotate({
+          description: "Only expose these tools to models from this provider.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),
